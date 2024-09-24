@@ -1,0 +1,332 @@
+# Django REST Framework - Part 1
+
+## Installation
+
+ทำการติดตั้งด้วยคำสั่ง pip
+
+```sh
+pip install djangorestframework
+```
+
+เพิ่ม "rest_framework" ใน INSTALLED_APP ใน `settings.py`
+
+```python
+INSTALLED_APPS = [
+    ...
+    'rest_framework',
+]
+```
+
+## Let's do a quick tutorial
+
+เรามาเริ่มด้วยการสร้าง project กันก่อน
+
+```sh
+# Create the project directory
+mkdir tutorial
+cd tutorial
+
+# Create a virtual environment to isolate our package dependencies locally
+py -m venv myvenv
+myvenv\Scripts\activate.bat  # On Mac use `source myvenv/bin/activate`
+
+# Install Django and Django REST framework into the virtual environment
+pip install django psycopg2 
+pip install djangorestframework pygments
+
+# Set up a new project with a single application
+django-admin startproject week13_tutorial
+cd week13_tutorial
+python manage.py startapp snippets
+```
+
+ทำการเพิ่ม "snippets" และ "rest_framework" ใน INSTALLED_APPS และ แก้ไข connection ของ database ให้ถูกต้อง (สร้าง DB ชื่อ snippets ใน Postgres ด้วย)
+
+```python
+INSTALLED_APPS = [
+    ...
+    'rest_framework',
+    'snippets',
+]
+```
+
+### Creating a model to work with
+
+เราจะมาสร้าง website สำหรับเก็บ code snippets เพิ่ม code ใน `snippets/models.py`
+
+```python
+from django.db import models
+from pygments.lexers import get_all_lexers
+from pygments.styles import get_all_styles
+
+LEXERS = [item for item in get_all_lexers() if item[1]]
+LANGUAGE_CHOICES = sorted([(item[1][0], item[0]) for item in LEXERS])
+STYLE_CHOICES = sorted([(item, item) for item in get_all_styles()])
+
+
+class Snippet(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
+    title = models.CharField(max_length=100, blank=True, default='')
+    code = models.TextField()
+    linenos = models.IntegerField(default=0)
+    language = models.CharField(choices=LANGUAGE_CHOICES, default='python', max_length=100)
+    style = models.CharField(choices=STYLE_CHOICES, default='friendly', max_length=100)
+
+    class Meta:
+        ordering = ['created']
+```
+
+จากนั้นทำการ `makemigrations` และ `migrate`
+
+### Creating a Serializer class
+
+Serializer class นั้นจะมีหน้าที่ในการ serialize (แปลงข้อมูล model เป็น data type ของ Python) และ deserialize (แปลงจาก JSON มาเป็น Python dictionary)
+
+Serializer class นั้นทำงานคล้ายกับ class Form ใน Django มากๆ
+
+เรามาสร้างไฟล์ `snippets/serializers.py` และนำ code นี้ไปใส่
+
+```python
+from rest_framework import serializers
+from snippets.models import Snippet, LANGUAGE_CHOICES, STYLE_CHOICES
+
+
+class SnippetSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    title = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    code = serializers.CharField()
+    linenos = serializers.IntegerField(required=False)
+    language = serializers.ChoiceField(choices=LANGUAGE_CHOICES, default='python')
+    style = serializers.ChoiceField(choices=STYLE_CHOICES, default='friendly')
+
+    def create(self, validated_data):
+        """
+        Create and return a new `Snippet` instance, given the validated data.
+        """
+        return Snippet.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        """
+        Update and return an existing `Snippet` instance, given the validated data.
+        """
+        instance.title = validated_data.get('title', instance.title)
+        instance.code = validated_data.get('code', instance.code)
+        instance.linenos = validated_data.get('linenos', instance.linenos)
+        instance.language = validated_data.get('language', instance.language)
+        instance.style = validated_data.get('style', instance.style)
+        instance.save()
+        return instance
+```
+
+โดยใน serializer เราสามารถทำการ validate ข้อมูลได้ (คล้ายๆ กับ Form ใน Django เลย!)
+
+โดยสามารถ validate ในระดับ field และ ระดับทั้ง serializer ดังตัวอย่าง
+
+```python
+...
+class SnippetSerializer(serializers.Serializer):
+    ...
+
+    # Field-level validation
+    def validate_linenos(self, value):
+        """
+        Check that line number cannot be negative.
+        """
+        if value and value < 0:
+            raise serializers.ValidationError("Line number cannot be negative")
+        return value
+    
+    # Serializer-level validation
+    def validate(self, data):
+        """
+        Check that if the language is Python the snippet's title must contains 'django'
+        """
+        if data['language'] == 'python' and 'django' not in data['title'].lower():
+            raise serializers.ValidationError("For Python, snippets must be about Django")
+        return data
+```
+
+## Working with Serializers
+
+เรามาเข้า Django shell เพื่อทดสอบการใช้งาน serializer ที่เพิ่งสร้างมาดูกัน
+
+```sh
+python manage.py shell
+```
+
+เรามาสร้างข้อมูล snippet กันก่อน
+
+```python
+from snippets.models import Snippet
+from snippets.serializers import SnippetSerializer
+from rest_framework.renderers import JSONRenderer
+from rest_framework.parsers import JSONParser
+
+snippet = Snippet(title='My code', code='foo = "bar"\n')
+snippet.save()
+
+snippet = Snippet(title='Hello', code='print("hello, world")\n')
+snippet.save()
+```
+
+เมื่อทำการ serialize ข้อมูลตัว serializer จะทำการแปลง instance ของ model มาเป็น dictionary
+
+```python
+serializer = SnippetSerializer(snippet)
+serializer.data
+# {'id': 2, 'title': 'Hello', 'code': 'print("hello, world")\n', 'linenos': 0, 'language': 'python', 'style': 'friendly'}
+```
+
+จากนั้นถ้าเราต้องการแปลงเป็น `json` เราจะใช้ `JSONRenderer()`
+
+```python
+content = JSONRenderer().render(serializer.data)
+content
+# b'{"id":2,"title":"Hello","code":"print(\\"hello, world\\")\\n","linenos":0,"language":"python","style":"friendly"}'
+```
+
+การทำ deserialization นั้นคือการแปลงจาก `json` กลับมาเป็น Python native datatypes
+
+```
+import io
+
+stream = io.BytesIO(content)
+data = JSONParser().parse(stream)
+# {'id': 2, 'title': 'Hello', 'code': 'print("hello, world")\n', 'linenos': 0, 'language': 'python', 'style': 'friendly'}
+```
+
+จากนั้นเราเอาข้อมูลที่ถูก deserialized แล้ว ใส่เข้าไปใน SnippetSerializer
+
+```python
+serializer = SnippetSerializer(data=data)
+serializer.is_valid()
+# False
+serializer.errors
+# {'non_field_errors': [ErrorDetail(string='For Python, snippets must be about Django', code='invalid')]}
+```
+
+เรามาแก้ไขให้ title ถูกต้องกัน
+
+```python
+data['title'] = 'Hello Django'
+serializer = SnippetSerializer(data=data)
+serializer.is_valid()
+serializer.validated_data
+# {'title': 'Hello Django', 'code': 'print("hello, world")', 'linenos': 0, 'language': 'python', 'style': 'friendly'}
+serializer.save()
+# <Snippet: Snippet object>
+```
+
+ในกรณีที่เราต้องการ serialize ข้อมูลหลายๆ instance จะใช้ attribute `many=True`
+
+```python
+serializer = SnippetSerializer(Snippet.objects.all(), many=True)
+serializer.data
+# [{'id': 1, 'title': 'My code', 'code': 'foo = "bar"\n', 'linenos': 0, 'language': 'python', 'style': 'friendly'}, {'id': 2, 'title': 'Hello', 'code': 'print("hello, world")\n', 'linenos': 0, 'language': 'python', 'style': 'friendly'}, {'id': 3, 'title': 'Hello Django', 'code': 'print("hello, world")', 'linenos': 0, 'language': 'python', 'style': 'friendly'}]
+```
+
+## Using ModelSerializers
+
+เราสามารถทำให้ `SnippetSerializer` ล้อมาจาก model `Snippet` ได้โดยใช้ `ModelSerializer` คล้ายๆ กับ `Form` vs. `ModelForm` 
+
+ลองมากแก้ไข `SnippetSerializer` กัน
+
+```python
+class SnippetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Snippet
+        fields = ['id', 'title', 'code', 'linenos', 'language', 'style']
+```
+
+สิ่งที่ `ModelSerializer` ทำจะมี 2 เรื่องหลักๆ ได้แก่
+
+- สร้าง fields ให้อัตโนมัติ โดยไปล้อมาจาก model
+- ทำการ implement `create()` และ `update()`
+
+## Writing regular Django views using our Serializer
+
+ทีนี้เราจะมาสร้าง API views เพื่อรอรับ API request
+
+เพิ่ม code ด้่านล่างลงใน `snippets/views.py`
+
+```python
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.parsers import JSONParser
+from snippets.models import Snippet
+from snippets.serializers import SnippetSerializer
+
+@csrf_exempt # เนื่องจากเราจะใช้ POSTMAN ยิง API มาจะไม่ได้เป็นการ submit form ดังนั้นจะไม่มี csrf token แนบมาด้วย
+def snippet_list(request):
+    """
+    List all code snippets, or create a new snippet.
+    """
+    if request.method == 'GET':
+        snippets = Snippet.objects.all()
+        serializer = SnippetSerializer(snippets, many=True)
+        return JsonResponse(serializer.data, safe=False)
+
+    elif request.method == 'POST':
+        data = JSONParser().parse(request)
+        serializer = SnippetSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data, status=201)
+        return JsonResponse(serializer.errors, status=400)
+```
+
+และเพิ่ม view สำหรับดูรายละเอียดของ snippet ดังนั้นเพิ่ม code ด้านล่างใน `snippets/views.py`
+
+```python
+...
+
+@csrf_exempt
+def snippet_detail(request, pk):
+    """
+    Retrieve, update or delete a code snippet.
+    """
+    try:
+        snippet = Snippet.objects.get(pk=pk)
+    except Snippet.DoesNotExist:
+        return HttpResponse(status=404)
+
+    if request.method == 'GET':
+        serializer = SnippetSerializer(snippet)
+        return JsonResponse(serializer.data)
+
+    elif request.method == 'PUT':
+        data = JSONParser().parse(request)
+        serializer = SnippetSerializer(snippet, data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data)
+        return JsonResponse(serializer.errors, status=400)
+
+    elif request.method == 'DELETE':
+        snippet.delete()
+        return HttpResponse(status=204)
+```
+
+เพิ่ม path ใน `snippets/urls.py`
+
+```python
+from django.urls import path
+from snippets import views
+
+urlpatterns = [
+    path('snippets/', views.snippet_list),
+    path('snippets/<int:pk>/', views.snippet_detail),
+]
+```
+
+แก้ไขไฟล์ `week13_tutorial/urls.py`
+
+```python
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path('', include('snippets.urls')),
+]
+```
