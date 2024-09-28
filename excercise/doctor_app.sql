@@ -17,4 +17,4 @@ INSERT INTO appointments_patient (name, email, phone_number, address) VALUES
 
 INSERT INTO appointments_appointment (doctor_id, patient_id, date, at_time, details) VALUES
 (1, 1, '2024-09-28', '10:00:00', 'Initial consultation for heart health'),
-(1, 2, '2024-09-28', '11:00:00', 'Follow-up visit for check-up'),
+(1, 2, '2024-09-28', '11:00:00', 'Follow-up visit for check-up');
