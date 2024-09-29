@@ -1,8 +1,8 @@
-## Excercise 13
+# Excercise WEEK 13
 
 แอปนัดหมายกับหมอมี API หลัก ๆ ที่ใช้ในการจัดการข้อมูลแพทย์ ผู้ป่วย และนัดหมาย โดยแต่ละ API จะมีเส้นทาง (URL) และฟังก์ชันการทำงานที่แตกต่างกันไป ดังนี้:
 
-API เส้นทาง (Endpoints)
+**API endpoints**
 
     - GET /api/doctors/
 
@@ -18,10 +18,11 @@ API เส้นทาง (Endpoints)
 
     - DELETE /api/appointments/<id>/
 
-### คำสั่ง
+## คำสั่ง
+
 1. ให้นักศึกษาสร้างโปรเจคชื่อ `doctor_appointment`
 2. start app ชื่อ `appointments`
-3. แก้ไขไฟล์ models.py ใน appointments/models.py
+3. แก้ไขไฟล์ models.py ใน `appointments/models.py`
 
 ```PYTHON
 class Doctor(models.Model):
@@ -56,9 +57,10 @@ class Appointment(models.Model):
 
 ```
 
-4. สร้าง database ชื่อ `doctor_app_db` และแก้ไข settings.py
+4. สร้าง database ชื่อ `doctor_app_db` และแก้ไข `settings.py`
 
 แก้ไข INSTALLED_APPS
+
 ```PYTHON
     INSTALLED_APPS = [
     'django.contrib.admin',
@@ -73,6 +75,7 @@ class Appointment(models.Model):
 ```
 
 แก้ไข DATABASES
+
 ```
 DATABASES = {
     "default": {
@@ -87,7 +90,7 @@ DATABASES = {
 ```
 
 4. สั่ง makemigrations และ migrate
-5. สร้างไฟล์ serializers.py และแก้ไข code
+5. สร้างไฟล์ `appointment/serializers.py` และแก้ไข code
 
 ```PYTHON
 class DoctorSerializer(serializers.ModelSerializer):
@@ -114,7 +117,7 @@ class PatientSerializer(serializers.ModelSerializer):
         ]
 ```
 
-6. แก้ไขไฟล์ view.py ใน appointments/views.py
+6. แก้ไขไฟล์ view.py ใน `appointments/views.py`
 
 ```PYTHON
 class DoctorList(APIView):
@@ -131,38 +134,42 @@ class PatientList(APIView):
 
 ```
 
-สร้างไฟล์ urls.py ใน appointments และแกไข code
+สร้างไฟล์ urls.py ใน appointments และแก้ไข code
+
 ```PYTHON
 urlpatterns = [
     path('doctors/', DoctorList.as_view(), name='doctor-list'),
     path('patients/', PatientList.as_view(), name='patient-list'),
 ]
-
 ```
 
-แก้ไขไฟล์ urls.py ใน doctor_appointment/urls.py
+แก้ไขไฟล์ urls.py ใน `doctor_appointment/urls.py`
+
 ```PYTHON
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('appointments.urls')),
 ]
 ```
+
 7. ทำการ insert ข้อมูลในไฟล์ `doctor_app.sql`
 
-#### จะเห็นได้ว่าเรามี API สำหรับ Get ข้อมูล คุณหมอ และผู้ป่วยแล้ว สามารทดลองยิง API ใน postman ได้เลย
+*จะเห็นได้ว่าเรามี API สำหรับ Get ข้อมูล คุณหมอ และผู้ป่วยแล้ว* สามารทดลองยิง API ใน postman ได้เลย
 
 - http://127.0.0.1:8000/api/doctors/
-
 - http://127.0.0.1:8000/api/patients/
 
 แต่เรายังไม่มี API สำหรับ Get ข้อมูล และสร้างลบแก้ไขนัดหมาย
 
 
-## PATH 1 Appointment list
+## PART 1: Appointment list
 
-#### 1.1 GET: สร้าง API ดึงข้อมูลรายการนัดมหายทั้งหมด (Get list)
+### 1.1 GET: สร้าง API ดึงข้อมูลรายการนัดหมายทั้งหมด (GET - appointment list) (1 คะแนน)
 
-ตัวอย่าง Reponse ที่ต้องการ
+**Hint**: ควรจะต้องมีการใช้งาน PatientSerializer และ DoctorSerializer เนื่องจากมี FK ไปยัง `Doctor` และ `Patient`
+
+ตัวอย่าง Response ที่ต้องการ
+
 ```JSON
 [
     {
@@ -208,14 +215,16 @@ urlpatterns = [
 ]
 ```
 
-#### 1.2  POST: สร้าง API สำหรับเพิ่มข้อมูล Appointment โดยให้มีการตรวจสอบ วันที่และเวลา ไม่ให้สามารถสร้างนัดหมายใน วันและเวลา ที่ผ่านไปแล้วได้
+### 1.2  POST: สร้าง API สำหรับเพิ่มข้อมูล Appointment โดยให้มีการตรวจสอบ วันที่และเวลา ไม่ให้สามารถสร้างนัดหมายใน วันและเวลา ที่ผ่านไปแล้วได้ (1 คะแนน)
+
+**Hint**: ควรจะต้องมีการ validate ข้อมูลใน `AppointmentSerializer`
 
 ตัวอย่างข้อมูลสำหรับ ยิง API สร้างนัดหมาย
 
 ```JSON
 {
-    "doctor": doctor_id,       // ID ของแพทย์ที่คุณต้องการนัดหมาย
-    "patient": patient_id,     // ID ของผู้ป่วยที่ทำการนัดหมาย
+    "doctor": 1,       // ID ของแพทย์ที่คุณต้องการนัดหมาย
+    "patient": 2,     // ID ของผู้ป่วยที่ทำการนัดหมาย
     "date": "2024-09-30",     // วันที่นัดหมาย (ในรูปแบบ YYYY-MM-DD)
     "at_time": "10:30:00",    // เวลานัดหมาย (ในรูปแบบ HH:MM:SS)
     "details": "Follow-up appointment regarding recent test results" // รายละเอียดเพิ่มเติม
@@ -224,7 +233,9 @@ urlpatterns = [
 
 
 ตัวอย่าง Response เมื่อ input ข้อมูลที่ไม่ถูกต้อง
-Reuest:
+
+Request:
+
 ```JSON
 {
     "doctor": 1,
@@ -234,7 +245,9 @@ Reuest:
     "details": "Follow-up appointment"
 }
 ```
-Reponse: (statu code 400 bad request)
+
+Response: (status code 400 bad request)
+
 ```JSON
 {
     "non_field_errors": [
@@ -243,14 +256,14 @@ Reponse: (statu code 400 bad request)
 }
 ```
 
+## PART 2: Appointment Detail
 
-## PATH 2 Appointment Detail
+> หมายเหตุ: หากไม่พบ id ใน database ให้ response status code 404 Not Found
 
-> หากไม่พบ id ใน database ให้ reponse status code 404 Not Found
+### 2.1 GET: สร้าง API ดึงข้อมูลนัดหมายจาก id (GET - appointment detail) (0.5 คะแนน)
 
-#### 2.1 GET: สร้าง API ดึงข้อมูลนัดหมายจาก id (Get detail)
+ตัวอย่าง Response ที่ต้องการ
 
-ตัวอย่าง Reponse ที่ต้องการ
 ```JSON
 {
     "id": 1,
@@ -274,13 +287,14 @@ Reponse: (statu code 400 bad request)
 }
 ```
 
-#### 2.2 PUT หรือ PATCH: สร้าง API สำหรับแก้ไขข้อมูลนัดหมาย โดยให้มีการตรวจสอบ วันที่และเวลา ไม่ให้สามารถสร้างนัดหมายใน วันและเวลา ที่ผ่านไปแล้วได้
+### 2.2 PUT หรือ PATCH: สร้าง API สำหรับแก้ไขข้อมูลนัดหมาย โดยให้มีการตรวจสอบ วันที่และเวลา ไม่ให้สามารถสร้างนัดหมายใน วันและเวลา ที่ผ่านไปแล้วได้ (0.5 คะแนน)
 
 ตัวอย่างข้อมูลสำหรับ ยิง API แก้ไขข้อมูลนัดหมาย
+
 ```JSON
 {
-    "doctor": doctor_id,       // ID ของแพทย์ที่คุณต้องการนัดหมาย
-    "patient": patient_id,     // ID ของผู้ป่วยที่ทำการนัดหมาย
+    "doctor": 1,       // ID ของแพทย์ที่คุณต้องการนัดหมาย
+    "patient": 2,     // ID ของผู้ป่วยที่ทำการนัดหมาย
     "date": "2024-09-30",     // วันที่นัดหมาย (ในรูปแบบ YYYY-MM-DD)
     "at_time": "10:30:00",    // เวลานัดหมาย (ในรูปแบบ HH:MM:SS)
     "details": "Follow-up appointment regarding recent test results" // รายละเอียดเพิ่มเติม
@@ -288,7 +302,9 @@ Reponse: (statu code 400 bad request)
 ```
 
 ตัวอย่าง Response เมื่อ input ข้อมูลที่ไม่ถูกต้อง
-Reuest
+
+Request:
+
 ```JSON
 {
     "doctor": 1,
@@ -298,7 +314,9 @@ Reuest
     "details": "Follow-up appointment"
 }
 ```
-Reponse: (statu code 400 bad request)
+
+Response: (status code 400 bad request)
+
 ```JSON
 {
     "non_field_errors": [
@@ -307,6 +325,6 @@ Reponse: (statu code 400 bad request)
 }
 ```
 
-#### 2.3 DELETE: สร้าง API สำหรับ ลบข้อมูลนัดหมาย (Delete by id)
-Reponse: (statu code 204 No Content)
+### 2.3 DELETE: สร้าง API สำหรับ ลบข้อมูลนัดหมาย (Delete by id) (0.5 คะแนน)
 
+Response: (status code 204 No Content)
