@@ -330,3 +330,232 @@ urlpatterns = [
     path('', include('snippets.urls')),
 ]
 ```
+
+ทดสอบการใช้งาน API ด้วย POSTMAN App
+
+## Serializer relations
+
+[Doc](https://www.django-rest-framework.org/api-guide/relations/#serializer-relations)
+
+ในกรณีที่ model มีการกำหนดความสัมพันธ์เช่น one-to-one, one-to-many และ many-to-many เราสามารถใช้ `Serializer` ในการ serialize ข้อมูลที่มี relationship กันอยู่ออกมาได้เช่น 
+
+สมมติเรามี model `Album` และ `Track` สังเกตว่า `Track` มี FK ไปหา `Album` ดังนั้นทั้ง 2 models นี้มีความสัมพันธ์กันแบบ one-to-many
+
+```python
+class Album(models.Model):
+    album_name = models.CharField(max_length=100)
+    artist = models.CharField(max_length=100)
+
+class Track(models.Model):
+    album = models.ForeignKey(Album, related_name='tracks', on_delete=models.CASCADE)
+    order = models.IntegerField()
+    title = models.CharField(max_length=100)
+    duration = models.IntegerField()
+
+    class Meta:
+        unique_together = ['album', 'order']
+        ordering = ['order']
+
+    def __str__(self):
+        return '%d: %s' % (self.order, self.title)
+```
+
+### StringRelatedField
+
+จะแสดงผลข้อมูล `__str__` method ดังตัวอย่าง
+
+```python
+class AlbumSerializer(serializers.ModelSerializer):
+    tracks = serializers.StringRelatedField(many=True)
+
+    class Meta:
+        model = Album
+        fields = ['album_name', 'artist', 'tracks']
+```
+
+ผลที่ได้จาก `serializer.data` จะเป็นดังนี้
+
+```python
+{
+    'album_name': 'Things We Lost In The Fire',
+    'artist': 'Low',
+    'tracks': [
+        '1: Sunflower',
+        '2: Whitetail',
+        '3: Dinosaur Act',
+        ...
+    ]
+}
+```
+
+### PrimaryKeyRelatedField
+
+จะแสดงข้อมูล primary key ของตารางที่เกี่ยวข้อง
+
+```python
+class AlbumSerializer(serializers.ModelSerializer):
+    tracks = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+
+    class Meta:
+        model = Album
+        fields = ['album_name', 'artist', 'tracks']
+```
+
+ผลที่ได้จาก `serializer.data` จะเป็นดังนี้
+
+```python
+{
+    'album_name': 'Things We Lost In The Fire',
+    'artist': 'Low',
+    'tracks': [
+        89,
+        90,
+        91,
+        ...
+    ]
+}
+```
+
+### Nested relationships
+
+ในกรณีที่เราจ้องการแสดงข้อมูลที่เกี่ยวข้องเป็น list of objects เป็น nested ลงไปเราสามารถทำได้โดยการประกาศ `Serialier` ของ object ที่เกี่ยวข้องนั้นๆ และนำมาเรียกใช้เป็น field ดังตัวอย่าง
+
+**Note:** ในกรณีที่เราอยู่ในฝั่ง one สำหรับ one-to-many จะต้องใช้ `many=True` นะครับ
+
+```python
+class TrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Track
+        fields = ['order', 'title', 'duration']
+
+class AlbumSerializer(serializers.ModelSerializer):
+    tracks = TrackSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Album
+        fields = ['album_name', 'artist', 'tracks']
+```
+
+โดย `AlbumSerializer` จะแสดงผลดังนี้
+
+```python
+>>> album = Album.objects.create(album_name="The Grey Album", artist='Danger Mouse')
+>>> Track.objects.create(album=album, order=1, title='Public Service Announcement', duration=245)
+<Track: Track object>
+>>> Track.objects.create(album=album, order=2, title='What More Can I Say', duration=264)
+<Track: Track object>
+>>> Track.objects.create(album=album, order=3, title='Encore', duration=159)
+<Track: Track object>
+>>> serializer = AlbumSerializer(instance=album)
+>>> serializer.data
+{
+    'album_name': 'The Grey Album',
+    'artist': 'Danger Mouse',
+    'tracks': [
+        {'order': 1, 'title': 'Public Service Announcement', 'duration': 245},
+        {'order': 2, 'title': 'What More Can I Say', 'duration': 264},
+        {'order': 3, 'title': 'Encore', 'duration': 159},
+    ],
+}
+```
+
+#### เรามาลองทำ tutorial ของเรากันต่อ
+
+ทำการเพิ่ม model `SnippetCategory` เข้าไป และเพิ่ม FK ไปใน model `Snippet` ดังนี้
+
+```python
+# snippets/models.py
+...
+class SnippetCategory(models.Model):
+    name = models.CharField(max_length=100)
+
+
+class Snippet(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
+    title = models.CharField(max_length=100, blank=True, default='')
+    code = models.TextField()
+    linenos = models.IntegerField(default=0)
+    language = models.CharField(choices=LANGUAGE_CHOICES, default='python', max_length=100)
+    style = models.CharField(choices=STYLE_CHOICES, default='friendly', max_length=100)
+    category = models.ForeignKey(SnippetCategory, null=True, on_delete=models.CASCADE)
+
+    class Meta:
+        ordering = ['created']
+```
+
+ทำการเพิ่ม `SnippetCategorySerializer` ไปใน `snippets/serialziers.py`
+
+```python
+from rest_framework import serializers
+from snippets.models import Snippet, SnippetCategory
+
+class SnippetCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SnippetCategory
+        fields = ['id', 'name']
+
+class SnippetSerializer(serializers.ModelSerializer):
+    category = SnippetCategorySerializer()
+
+    class Meta:
+        model = Snippet
+        fields = ['id', 'title', 'code', 'linenos', 'language', 'style', 'category']
+```
+
+ทดสอบการใช้งาน API ด้วย POSTMAN App
+
+#### มาลองใช้งาน many=True กัน
+
+ปรับเพิ่มข้อมูลของ Snippet ที่เกี่ยวข้องใน `SnippetCategorySerializer` ดังนี้
+
+```python
+from rest_framework import serializers
+from snippets.models import Snippet, SnippetCategory
+
+class SnippetSerializer(serializers.ModelSerializer):
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = Snippet
+        fields = ['id', 'title', 'code', 'linenos', 'language', 'style', 'category']
+
+class SnippetCategorySerializer(serializers.ModelSerializer):
+    snippet_set = SnippetSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = SnippetCategory
+        fields = ['id', 'name', 'snippet_set']
+```
+
+เพิ่ม path และ view สำหรับ GET list ของ `SnippetCategory`
+
+```python
+# snippets/urls
+from django.urls import path
+from snippets import views
+
+urlpatterns = [
+    path('snippets/', views.snippet_list),
+    path('snippets/<int:pk>/', views.snippet_detail),
+    path('categories/', views.category_list),
+]
+```
+
+และ เพิ่ม view ใน `snippets/views.py`
+
+```python
+...
+from snippets.models import Snippet, SnippetCategory
+from snippets.serializers import SnippetSerializer, SnippetCategorySerializer
+...
+def category_list(request):
+    """
+    List all snippet categories.
+    """
+    if request.method == 'GET':
+        categories = SnippetCategory.objects.all()
+        serializer = SnippetCategorySerializer(categories, many=True)
+        return JsonResponse(serializer.data, safe=False)
+```
+
+ทดสอบการใช้งาน API ด้วย POSTMAN App
